@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb_diploma_b4
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
+      MONGO_INITDB_DATABASE: b4
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - mongo-network
+    command: >
+      bash -c "
+      mongod --fork --logpath /var/log/mongodb.log;
+      mongo b4 --eval 'db.createUser({user: \"admin\", pwd: \"admin\", roles: [{role: \"readWrite\", db: \"b4\"}]})';
+      mongod --shutdown;
+      mongod --bind_ip_all
+      "
+
+volumes:
+  mongo-data:
+
+networks:
+  mongo-network:
