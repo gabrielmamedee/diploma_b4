@@ -42,4 +42,15 @@ public class HistoricoAcademico {
     private String dataConclusaoCurso;
     private String dataColacaoGrau;
     private String dataExpedicaoDiploma;
+
+    private String sexo;
+    private Naturalidade naturalidade;
+
+    // Classe aninhada para a Naturalidade
+    @Data
+    public static class Naturalidade {
+        private String codigoMunicipio;
+        private String nomeMunicipio;
+        private String uf;
+    }
 }
