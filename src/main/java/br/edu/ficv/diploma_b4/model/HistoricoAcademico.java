@@ -21,6 +21,8 @@ public class HistoricoAcademico {
     private String matricula;
     private String cpf;
 
+    private Integer codigoCursoEMEC;
+
     // Dados do Ingresso e Curso
     private String anoSemestreIngresso;
     private String dataRealizacaoProcessoSeletivo;

@@ -35,7 +35,7 @@ public class DadosDiplomaDTO {
     public static class DadosCurso {
         private String nomeCurso;
         private Integer codigoCursoEMEC;
-        private InformacoesTramitacaoEmec informacoesTramitacaoEmec;
+        //private InformacoesTramitacaoEmec informacoesTramitacaoEmec; -- provalvemente não será necessario esse campo
         private String modalidade;
         private TituloConferido tituloConferido;
         private String grauConferido;

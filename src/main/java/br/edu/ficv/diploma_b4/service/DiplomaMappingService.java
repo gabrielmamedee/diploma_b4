@@ -1,7 +1,9 @@
 package br.edu.ficv.diploma_b4.service;
 
+import br.edu.ficv.diploma_b4.model.Curso;
 import br.edu.ficv.diploma_b4.model.HistoricoAcademico;
 import br.edu.ficv.diploma_b4.model.Ies;
+import br.edu.ficv.diploma_b4.repository.CursoRepository;
 import br.edu.ficv.diploma_b4.repository.IesRepository;
 import br.edu.ficv.diploma_b4.model.dto.DadosDiplomaDTO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,39 +19,36 @@ public class DiplomaMappingService {
     @Autowired
     private IesRepository iesRepository;
 
-    /**
-     * Orquestra o preenchimento de todo o bloco "dadosDiploma".
-     * Este é o método principal que será chamado pelo Controller.
-     */
+    @Autowired
+    private CursoRepository cursoRepository;
+
     public DadosDiplomaDTO montarDadosDiploma(HistoricoAcademico historico) {
-        // 1. Busca os dados de configuração da instituição no banco.
         Ies ies = iesRepository.findById("09491298000316")
                 .orElseThrow(() -> new RuntimeException("Dados da IES Emissora com ID 09491298000316 não encontrados no banco."));
 
+        if (historico.getCodigoCursoEMEC() == null) {
+            throw new RuntimeException("O Histórico Acadêmico não possui um código de curso (codigoCursoEMEC) associado.");
+        }
+        Curso curso = cursoRepository.findById(historico.getCodigoCursoEMEC())
+                .orElseThrow(() -> new RuntimeException("Dados do Curso com código " + historico.getCodigoCursoEMEC() + " não encontrados."));
+
         DadosDiplomaDTO dadosDiploma = new DadosDiplomaDTO();
 
-        // 2. Preenche cada parte principal do DTO usando métodos auxiliares
         dadosDiploma.setDiplomado(mapearDiplomado(historico));
         dadosDiploma.setDataConclusao(formatarData(historico.getDataConclusaoCurso()));
-        dadosDiploma.setDadosCurso(mapearDadosCurso(historico, ies));
+        dadosDiploma.setDadosCurso(mapearDadosCurso(historico, curso, ies));
         dadosDiploma.setIesEmissora(mapearIesEmissora(ies));
 
         return dadosDiploma;
     }
 
-    /**
-     * Mapeia os dados do objeto "diplomado" conforme sua especificação.
-     */
     private DadosDiplomaDTO.Diplomado mapearDiplomado(HistoricoAcademico historico) {
         DadosDiplomaDTO.Diplomado diplomado = new DadosDiplomaDTO.Diplomado();
-
         diplomado.setId(historico.getMatricula());
         diplomado.setNome(historico.getNomeAluno());
         diplomado.setNacionalidade(historico.getNacionalidade());
         diplomado.setCpf(historico.getCpf().replaceAll("[^\\d]", ""));
-        diplomado.setSexo(historico.getSexo()); // Vem da requisição, já salvo no HistoricoAcademico
-
-        // Mapeia o objeto de naturalidade que veio da requisição
+        diplomado.setSexo(historico.getSexo());
         if (historico.getNaturalidade() != null) {
             DadosDiplomaDTO.Naturalidade naturalidadeDto = new DadosDiplomaDTO.Naturalidade();
             naturalidadeDto.setCodigoMunicipio(historico.getNaturalidade().getCodigoMunicipio());
@@ -57,11 +56,7 @@ public class DiplomaMappingService {
             naturalidadeDto.setUf(historico.getNaturalidade().getUf());
             diplomado.setNaturalidade(naturalidadeDto);
         }
-
-        // Transformação: Formatar data para YYYY-MM-DD
         diplomado.setDataNascimento(formatarData(historico.getDataNascimento()));
-
-        // Transformação: "Desfragmentar" o RG
         if (historico.getRg() != null) {
             String[] rgParts = historico.getRg().split(" ");
             if (rgParts.length >= 3) {
@@ -75,60 +70,59 @@ public class DiplomaMappingService {
         return diplomado;
     }
 
-    /**
-     * Mapeia os dados do objeto "dadosCurso".
-     */
-    private DadosDiplomaDTO.DadosCurso mapearDadosCurso(HistoricoAcademico historico, Ies ies) {
-        DadosDiplomaDTO.DadosCurso dadosCurso = new DadosDiplomaDTO.DadosCurso();
+    private DadosDiplomaDTO.DadosCurso mapearDadosCurso(HistoricoAcademico historico, Curso curso, Ies ies) {
+        DadosDiplomaDTO.DadosCurso dadosCursoDto = new DadosDiplomaDTO.DadosCurso();
 
-        // Transformação: Limpar o nome do curso
-        if (historico.getNomeCurso() != null) {
-            String nomeCursoTratado = historico.getNomeCurso()
-                    .replace("Bacharelado em", "")
-                    .replace("Bacharel", "")
-                    .trim();
-            dadosCurso.setNomeCurso(nomeCursoTratado);
+        dadosCursoDto.setNomeCurso(curso.getNomeCurso());
+        dadosCursoDto.setCodigoCursoEMEC(curso.getCodigoCursoEMEC());
+        dadosCursoDto.setModalidade(curso.getModalidade());
+        dadosCursoDto.setGrauConferido(curso.getGrauConferido());
+
+        if (curso.getTituloConferido() != null) {
+            DadosDiplomaDTO.TituloConferido tituloDto = new DadosDiplomaDTO.TituloConferido();
+            tituloDto.setTitulo(curso.getTituloConferido().getTitulo());
+            dadosCursoDto.setTituloConferido(tituloDto);
         }
 
-        // Mapeia o endereço do curso a partir dos dados da IES
+        if (curso.getAutorizacao() != null) {
+            DadosDiplomaDTO.AtoRegulatorio autorizacaoDto = new DadosDiplomaDTO.AtoRegulatorio();
+            copyAtoRegulatorio(curso.getAutorizacao(), autorizacaoDto);
+            dadosCursoDto.setAutorizacao(autorizacaoDto);
+        }
+
+        if (curso.getReconhecimento() != null) {
+            DadosDiplomaDTO.AtoRegulatorio reconhecimentoDto = new DadosDiplomaDTO.AtoRegulatorio();
+            copyAtoRegulatorio(curso.getReconhecimento(), reconhecimentoDto);
+            dadosCursoDto.setReconhecimento(reconhecimentoDto);
+        }
+
+        //if (curso.getInformacoesTramitacaoEmec() != null) {
+        //    DadosDiplomaDTO.InformacoesTramitacaoEmec infoDto = new DadosDiplomaDTO.InformacoesTramitacaoEmec();
+        //    copyInformacoesTramitacaoEmec(curso.getInformacoesTramitacaoEmec(), infoDto);
+        //    dadosCursoDto.setInformacoesTramitacaoEmec(infoDto);
+        //}
+
         if (ies.getEndereco() != null) {
             DadosDiplomaDTO.Endereco enderecoDto = new DadosDiplomaDTO.Endereco();
             copyEndereco(ies.getEndereco(), enderecoDto);
-            dadosCurso.setEnderecoCurso(enderecoDto);
+            dadosCursoDto.setEnderecoCurso(enderecoDto);
         }
 
-        // ATENÇÃO: Demais dados viriam dos "dados adicionais" (salvos no HistoricoAcademico)
-        // ou da entidade IES, dependendo da regra de negócio.
-        // Ex: dadosCurso.setModalidade(historico.getModalidade());
-        DadosDiplomaDTO.TituloConferido titulo = new DadosDiplomaDTO.TituloConferido();
-        titulo.setTitulo("Bacharel"); // Exemplo de dado fixo/da requisição
-        dadosCurso.setTituloConferido(titulo);
-        dadosCurso.setGrauConferido("Bacharelado"); // Exemplo
-
-        return dadosCurso;
+        return dadosCursoDto;
     }
 
-    /**
-     * Mapeia os dados da entidade Ies (do banco) para o DTO IesEmissora.
-     */
-    /**
-     * Mapeia os dados da entidade Ies (do banco) para o DTO IesEmissora.
-     * VERSÃO ATUALIZADA para incluir credenciamento e recredenciamento.
-     */
     private DadosDiplomaDTO.IesEmissora mapearIesEmissora(Ies ies) {
         DadosDiplomaDTO.IesEmissora iesDto = new DadosDiplomaDTO.IesEmissora();
         iesDto.setNome(ies.getNome());
         iesDto.setCnpj(ies.getCnpj());
         iesDto.setCodigoMEC(ies.getCodigoMEC());
 
-        // Mapeia o endereço da IES
         if (ies.getEndereco() != null) {
             DadosDiplomaDTO.Endereco enderecoDto = new DadosDiplomaDTO.Endereco();
             copyEndereco(ies.getEndereco(), enderecoDto);
             iesDto.setEndereco(enderecoDto);
         }
 
-        // Mapeia a mantenedora e seu endereço
         if (ies.getMantenedora() != null) {
             DadosDiplomaDTO.Mantenedora mantenedoraDto = new DadosDiplomaDTO.Mantenedora();
             mantenedoraDto.setRazaoSocial(ies.getMantenedora().getRazaoSocial());
@@ -142,34 +136,25 @@ public class DiplomaMappingService {
             iesDto.setMantenedora(mantenedoraDto);
         }
 
-        // --- LÓGICA ADICIONADA PARA O CREDENCIAMENTO ---
         if (ies.getCredenciamento() != null) {
             DadosDiplomaDTO.Credenciamento credenciamentoDto = new DadosDiplomaDTO.Credenciamento();
             Ies.Credenciamento credenciamentoEntidade = ies.getCredenciamento();
-
             credenciamentoDto.setTipo(credenciamentoEntidade.getTipo());
             credenciamentoDto.setNumero(credenciamentoEntidade.getNumero());
             credenciamentoDto.setData(credenciamentoEntidade.getData());
             credenciamentoDto.setVeiculoPublicacao(credenciamentoEntidade.getVeiculoPublicacao());
             credenciamentoDto.setDataPublicacao(credenciamentoEntidade.getDataPublicacao());
-            credenciamentoDto.setSecaoPublicacao( (int) credenciamentoEntidade.getSecaoPublicacao());
-            credenciamentoDto.setPaginaPublicacao( (int) credenciamentoEntidade.getPaginaPublicacao());
-            credenciamentoDto.setNumeroDOU( (int) credenciamentoEntidade.getNumeroDOU());
-
+            credenciamentoDto.setSecaoPublicacao((int) credenciamentoEntidade.getSecaoPublicacao());
+            credenciamentoDto.setPaginaPublicacao((int) credenciamentoEntidade.getPaginaPublicacao());
+            credenciamentoDto.setNumeroDOU((int) credenciamentoEntidade.getNumeroDOU());
             iesDto.setCredenciamento(credenciamentoDto);
         }
 
-        // --- LÓGICA ADICIONADA PARA O RECREDENCIAMENTO ---
         if (ies.getRecredenciamento() != null) {
             DadosDiplomaDTO.Recredenciamento recredenciamentoDto = new DadosDiplomaDTO.Recredenciamento();
             DadosDiplomaDTO.InformacoesTramitacaoEmec infoDto = new DadosDiplomaDTO.InformacoesTramitacaoEmec();
             Ies.InformacoesTramitacaoEmec infoEntidade = ies.getRecredenciamento().getInformacoesTramitacaoEmec();
-
-            infoDto.setNumeroProcesso(infoEntidade.getNumeroProcesso());
-            infoDto.setTipoProcesso(infoEntidade.getTipoProcesso());
-            infoDto.setDataCadastro(infoEntidade.getDataCadastro());
-            infoDto.setDataProtocolo(infoEntidade.getDataProtocolo());
-
+            copyInformacoesTramitacaoEmec(infoEntidade, infoDto);
             recredenciamentoDto.setInformacoesTramitacaoEmec(infoDto);
             iesDto.setRecredenciamento(recredenciamentoDto);
         }
@@ -177,25 +162,17 @@ public class DiplomaMappingService {
         return iesDto;
     }
 
-    /**
-     * Função auxiliar para converter datas do formato DD/MM/YYYY para YYYY-MM-DD.
-     */
     private String formatarData(String dataDdMmAaaa) {
         if (dataDdMmAaaa == null || dataDdMmAaaa.isBlank()) return null;
         try {
-            DateTimeFormatter formatoEntrada = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-            DateTimeFormatter formatoSaida = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-            return LocalDate.parse(dataDdMmAaaa, formatoEntrada).format(formatoSaida);
+            return LocalDate.parse(dataDdMmAaaa, DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         } catch (DateTimeParseException e) {
-            // Adiciona um log de erro para ajudar na depuração
             System.err.println("AVISO: Não foi possível converter a data '" + dataDdMmAaaa + "'. Verifique o formato. Retornando valor original.");
             return dataDdMmAaaa;
         }
     }
 
-    /**
-     * Função auxiliar para copiar dados de um objeto Endereco de entidade para DTO.
-     */
     private void copyEndereco(Ies.Endereco source, DadosDiplomaDTO.Endereco destination) {
         destination.setLogradouro(source.getLogradouro());
         destination.setNumero(source.getNumero());
@@ -204,5 +181,27 @@ public class DiplomaMappingService {
         destination.setNomeMunicipio(source.getNomeMunicipio());
         destination.setUf(source.getUf());
         destination.setCep(source.getCep());
+    }
+
+    private void copyAtoRegulatorio(Curso.AtoRegulatorio source, DadosDiplomaDTO.AtoRegulatorio destination) {
+        destination.setTipo(source.getTipo());
+        destination.setNumero(source.getNumero());
+        destination.setData(source.getData());
+        destination.setVeiculoPublicacao(source.getVeiculoPublicacao());
+        destination.setDataPublicacao(source.getDataPublicacao());
+    }
+
+    private void copyInformacoesTramitacaoEmec(Curso.InformacoesTramitacaoEmec source, DadosDiplomaDTO.InformacoesTramitacaoEmec destination) {
+        destination.setNumeroProcesso(source.getNumeroProcesso());
+        destination.setTipoProcesso(source.getTipoProcesso());
+        destination.setDataCadastro(source.getDataCadastro());
+        destination.setDataProtocolo(source.getDataProtocolo());
+    }
+    // No método mapearIesEmissora, a infoEmec vem da entidade Ies, então precisamos de uma sobrecarga do método.
+    private void copyInformacoesTramitacaoEmec(Ies.InformacoesTramitacaoEmec source, DadosDiplomaDTO.InformacoesTramitacaoEmec destination) {
+        destination.setNumeroProcesso(source.getNumeroProcesso());
+        destination.setTipoProcesso(source.getTipoProcesso());
+        destination.setDataCadastro(source.getDataCadastro());
+        destination.setDataProtocolo(source.getDataProtocolo());
     }
 }

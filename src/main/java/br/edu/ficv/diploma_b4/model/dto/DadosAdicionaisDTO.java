@@ -11,5 +11,5 @@ import lombok.Data;
 public class DadosAdicionaisDTO {
     private String sexo;
     private Naturalidade naturalidade;
-
+    private Integer codigoCursoEMEC;
 }

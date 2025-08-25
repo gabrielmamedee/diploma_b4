@@ -50,6 +50,7 @@ public class HistoricoController {
             // "Enriquecemos" o objeto extraído com os dados que vieram do JSON.
             historicoExtraido.setSexo(dadosAdicionais.getSexo());
             historicoExtraido.setNaturalidade(dadosAdicionais.getNaturalidade());
+            historicoExtraido.setCodigoCursoEMEC(dadosAdicionais.getCodigoCursoEMEC());
 
             // 3. Salvamos o objeto COMPLETO (PDF + JSON) no banco de dados
             HistoricoAcademico historicoSalvo = historicoRepository.save(historicoExtraido);
